@@ -1,0 +1,8 @@
+# Maintainers: @ryhanschutz (firmware/backend) and @V651202 (Digital Twin).
+/firmware/ @ryhanschutz
+/backend/ @ryhanschutz
+/digital-twin/ @V651202
+/docs/protocol.md @ryhanschutz @V651202
+/docs/hardware.md @ryhanschutz @V651202
+/docs/calibration.template.md @ryhanschutz @V651202
+/docs/onboarding-victor.md @V651202

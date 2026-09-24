@@ -1,0 +1,21 @@
+# Build and editor artifacts
+.pio/
+.vscode/
+firmware/.pio/
+firmware/.vscode/
+
+# Python and local configuration
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.code-workspace
+
+# Generated Digital Twin outputs / large local captures
+digital-twin/build/
+digital-twin/dist/
+*.log
+
+# Do not commit physical calibration values or serial-port settings
+docs/calibration.local.md
+backend/.env

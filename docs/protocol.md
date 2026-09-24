@@ -15,13 +15,15 @@ Este arquivo é o contrato normativo da integração. Transporte: serial USB, **
 | `PING,<seq>` | verifica conexão | `PONG,<seq>,v0` |
 | `GET_STATE,<seq>` | consulta o último estado conhecido | `STATE,<seq>,<moving>,<j1>,<j2>,<j3>,<j4>` |
 | `SET_JOINTS,<seq>,<j1>,<j2>,<j3>,<j4>` | valida e define alvos de todas as juntas atomicamente | `ACK,<seq>` |
-| `ESTOP,<seq>` | desabilita movimento pendente; requer procedimento local para liberar | `ACK,<seq>` |
+| `ESTOP,<seq>` | desabilita movimento pendente e desliga saídas PWM | `ACK,<seq>` |
+| `CAL_PULSE,<seq>,<ch>,<pulse_us>` | envia pulso bruto em microssegundos (450..2550) ao canal do PCA9685 para calibração | `ACK,<seq>` |
+| `CAL_DISABLE,<seq>,<ch>` | desativa PWM do canal específico (solta o torque do servo) | `ACK,<seq>` |
 
 `moving` é `0` ou `1`. Na versão vertical slice, movimentos podem ser imediatos e então retornar `0`; ao adicionar trajetória, atualize esta especificação.
 
 ## Erros
 
-`ERR,<seq>,<code>` onde `code` é `MALFORMED`, `UNKNOWN_COMMAND`, `OUT_OF_RANGE`, `ESTOP_ACTIVE`, `NOT_CALIBRATED` ou `BUSY`.
+`ERR,<seq>,<code>` onde `code` é `MALFORMED`, `UNKNOWN_COMMAND`, `OUT_OF_RANGE`, `ESTOP_ACTIVE`, `NOT_CALIBRATED`, `HARDWARE_ERROR` ou `BUSY`.
 
 Exemplos:
 

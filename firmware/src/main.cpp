@@ -1,49 +1,54 @@
 #include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
 
-#include "robot_state.h"
-#include "serial_protocol.h"
+#define I2C_SDA 21
+#define I2C_SCL 22
+#define PCA9685_ADDR 0x40
+#define SERVO 0
 
-namespace {
-RobotState robotState;
-SerialProtocol protocol;
-char line[kProtocolMaxLineLength + 1];
-size_t lineLength = 0;
-bool discardLine = false;
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(PCA9685_ADDR);
 
-void processLine() {
-  line[lineLength] = '\0';
-  ParsedCommand command{};
-  char response[kProtocolResponseLength];
-  const ProtocolError error = protocol.parse(line, &command);
-  if (error == ProtocolError::kNone) {
-    protocol.execute(command, &robotState, response, sizeof(response));
-  } else {
-    protocol.formatError(command.sequence, error, response, sizeof(response));
-  }
-  Serial.println(response);
+void setPulse(uint16_t us) {
+  pwm.writeMicroseconds(SERVO, us);
+  Serial.print("PWM = ");
+  Serial.print(us);
+  Serial.println(" us");
 }
-}  // namespace
 
 void setup() {
-  // Safe skeleton: servo outputs stay disabled until calibration is recorded.
   Serial.begin(115200);
-  Serial.println("EEZYbotARM Mk2 firmware: boot");
+  delay(500);
+
+  Wire.begin(I2C_SDA, I2C_SCL);
+
+  if (!pwm.begin()) {
+    Serial.println("[ERRO] PCA9685 nao detectado!");
+    while (1) {
+      delay(1000);
+    }
+  }
+
+  pwm.setPWMFreq(50);
+  delay(100);
+
+  Serial.println("TESTE MG996R - rotacao continua");
+  setPulse(1500);
+  delay(1000);
 }
 
 void loop() {
-  while (Serial.available() > 0) {
-    const char received = static_cast<char>(Serial.read());
-    if (received == '\r') continue;
-    if (received == '\n') {
-      if (!discardLine && lineLength > 0) processLine();
-      lineLength = 0;
-      discardLine = false;
-    } else if (!discardLine && lineLength < kProtocolMaxLineLength) {
-      line[lineLength++] = received;
-    } else {
-      // Once a line is oversized, discard all of it until its newline so a
-      // valid-looking suffix can never be interpreted as a fresh command.
-      discardLine = true;
-    }
+  const uint16_t values[] = {1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800,
+    0 1900, 2000};
+
+  for (uint8_t i = 0; i < 11; ++i) {
+    Serial.print("Valor: ");
+    Serial.print(values[i]);
+    Serial.println(" us");
+    setPulse(values[i]);
+    delay(1500);
   }
+
+  Serial.println("Fim do sweep. Reiniciando...");
+  delay(1000);
 }

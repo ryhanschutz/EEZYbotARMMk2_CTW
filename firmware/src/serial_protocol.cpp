@@ -13,6 +13,7 @@ const char* errorName(ProtocolError error) {
     case ProtocolError::kOutOfRange: return "OUT_OF_RANGE";
     case ProtocolError::kEstopActive: return "ESTOP_ACTIVE";
     case ProtocolError::kNotCalibrated: return "NOT_CALIBRATED";
+    case ProtocolError::kHardwareError: return "HARDWARE_ERROR";
     default: return "MALFORMED";
   }
 }
@@ -22,6 +23,24 @@ bool parseSequence(const char* token, uint16_t* value) {
   char* end = nullptr;
   const unsigned long parsed = strtoul(token, &end, 10);
   if (*end != '\0' || parsed > 65535UL) return false;
+  *value = static_cast<uint16_t>(parsed);
+  return true;
+}
+
+bool parseChannel(const char* token, uint8_t* value) {
+  if (token == nullptr || *token == '\0') return false;
+  char* end = nullptr;
+  const unsigned long parsed = strtoul(token, &end, 10);
+  if (*end != '\0' || parsed > 15UL) return false;
+  *value = static_cast<uint8_t>(parsed);
+  return true;
+}
+
+bool parsePulse(const char* token, uint16_t* value) {
+  if (token == nullptr || *token == '\0') return false;
+  char* end = nullptr;
+  const unsigned long parsed = strtoul(token, &end, 10);
+  if (*end != '\0' || parsed < kServoMinPulseUs || parsed > kServoMaxPulseUs) return false;
   *value = static_cast<uint16_t>(parsed);
   return true;
 }
@@ -58,6 +77,17 @@ ProtocolError SerialProtocol::parse(char* line, ParsedCommand* command) const {
     command->type = ProtocolCommand::kEstop;
     return noMoreTokens(context) ? ProtocolError::kNone : ProtocolError::kMalformed;
   }
+  if (strcmp(name, "CAL_PULSE") == 0) {
+    command->type = ProtocolCommand::kCalPulse;
+    if (!parseChannel(strtok_r(nullptr, ",", &context), &command->calChannel)) return ProtocolError::kOutOfRange;
+    if (!parsePulse(strtok_r(nullptr, ",", &context), &command->calPulseUs)) return ProtocolError::kOutOfRange;
+    return noMoreTokens(context) ? ProtocolError::kNone : ProtocolError::kMalformed;
+  }
+  if (strcmp(name, "CAL_DISABLE") == 0) {
+    command->type = ProtocolCommand::kCalDisable;
+    if (!parseChannel(strtok_r(nullptr, ",", &context), &command->calChannel)) return ProtocolError::kOutOfRange;
+    return noMoreTokens(context) ? ProtocolError::kNone : ProtocolError::kMalformed;
+  }
   if (strcmp(name, "SET_JOINTS") != 0) return ProtocolError::kUnknownCommand;
 
   command->type = ProtocolCommand::kSetJoints;
@@ -74,8 +104,8 @@ void SerialProtocol::formatError(uint16_t sequence, ProtocolError error, char* r
   snprintf(response, responseSize, "ERR,%u,%s", sequence, errorName(error));
 }
 
-void SerialProtocol::execute(const ParsedCommand& command, RobotState* state, char* response,
-                             size_t responseSize) const {
+void SerialProtocol::execute(const ParsedCommand& command, RobotState* state, PCA9685Driver* driver,
+                             char* response, size_t responseSize) const {
   if (command.type == ProtocolCommand::kPing) {
     snprintf(response, responseSize, "PONG,%u,v0", command.sequence);
     return;
@@ -88,6 +118,28 @@ void SerialProtocol::execute(const ParsedCommand& command, RobotState* state, ch
   }
   if (command.type == ProtocolCommand::kEstop) {
     state->engageEstop();
+    if (driver != nullptr) {
+      driver->disableAll();
+    }
+    snprintf(response, responseSize, "ACK,%u", command.sequence);
+    return;
+  }
+  if (command.type == ProtocolCommand::kCalPulse) {
+    if (state->estopActive()) {
+      formatError(command.sequence, ProtocolError::kEstopActive, response, responseSize);
+      return;
+    }
+    if (driver != nullptr && driver->setPulse(command.calChannel, command.calPulseUs)) {
+      snprintf(response, responseSize, "ACK,%u", command.sequence);
+    } else {
+      formatError(command.sequence, ProtocolError::kHardwareError, response, responseSize);
+    }
+    return;
+  }
+  if (command.type == ProtocolCommand::kCalDisable) {
+    if (driver != nullptr) {
+      driver->disableChannel(command.calChannel);
+    }
     snprintf(response, responseSize, "ACK,%u", command.sequence);
     return;
   }
@@ -97,6 +149,9 @@ void SerialProtocol::execute(const ParsedCommand& command, RobotState* state, ch
     } else if (!state->isCalibrated()) {
       formatError(command.sequence, ProtocolError::kNotCalibrated, response, responseSize);
     } else if (state->setTarget(command.angles)) {
+      if (driver != nullptr) {
+        driver->writeAllJoints(command.angles);
+      }
       snprintf(response, responseSize, "ACK,%u", command.sequence);
     }
     return;
